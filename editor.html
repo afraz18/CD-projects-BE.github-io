@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blog Editor with HTML Export</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#f6f8fa;margin:0;padding:20px;color:#111}
+  .wrap{display:flex;gap:20px;flex-wrap:wrap}
+  .card{background:#fff;border-radius:10px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,0.06);flex:1;min-width:300px}
+  input,textarea{width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px;font-size:14px;box-sizing:border-box}
+  .toolbar{display:flex;gap:6px;margin:8px 0}
+  .toolbar button{padding:6px 8px;border:1px solid #ccc;background:#fff;border-radius:6px;cursor:pointer}
+  #editor{min-height:200px;border:1px solid #ccc;border-radius:6px;padding:10px;background:#fff;overflow:auto}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .tag{background:#eef2ff;color:#1a3cff;padding:6px 8px;border-radius:999px;font-size:13px}
+  button.primary{background:#0f62fe;color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer;margin-top:10px}
+  textarea#output{height:250px;font-family:monospace;font-size:13px}
+  img.preview-img{max-width:100%;border-radius:8px;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<div class="card">
+  <h2>Blog Editor</h2>
+
+  <label>Title</label>
+  <input id="title" type="text" placeholder="Blog title">
+
+  <label>Category</label>
+  <input id="category" type="text" placeholder="Category">
+
+  <label>Tags</label>
+  <input id="tagInput" type="text" placeholder="Type tag and press Enter or comma">
+  <div id="tags" class="tags"></div>
+
+  <label>Featured Image</label>
+  <input type="file" id="image" accept="image/*">
+  <img id="imgPreview" class="preview-img" style="display:none">
+
+  <label>Excerpt</label>
+  <textarea id="excerpt" rows="3" placeholder="Short summary"></textarea>
+
+  <label>Content</label>
+  <div class="toolbar">
+    <button data-cmd="bold"><b>B</b></button>
+    <button data-cmd="italic"><i>I</i></button>
+    <button data-cmd="h2">H2</button>
+    <button data-cmd="ul">• List</button>
+    <button data-cmd="ol">1. List</button>
+    <button data-cmd="link">🔗</button>
+    <button id="insertImage">🖼</button>
+  </div>
+  <div id="editor" contenteditable="true"></div>
+
+  <button class="primary" id="generate">Generate HTML</button>
+</div>
+
+<div class="card">
+  <h2>Live Preview</h2>
+  <div id="livePreview" style="border:1px solid #ccc;padding:10px;border-radius:6px;min-height:200px;background:#fafafa"></div>
+
+  <h2>HTML Output</h2>
+  <textarea id="output" readonly></textarea>
+</div>
+
+</div>
+
+<script>
+// Tags logic
+let tags = [];
+function renderTags(){ document.getElementById('tags').innerHTML = tags.map(t=>`<span class="tag">${t}</span>`).join(''); }
+document.getElementById('tagInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter'||e.key===','){
+    e.preventDefault();
+    const val = e.target.value.trim().replace(/,$/,'');
+    if(val && !tags.includes(val)){ tags.push(val); renderTags(); }
+    e.target.value='';
+  }
+  else if(e.key==='Backspace' && e.target.value==='' && tags.length){ tags.pop(); renderTags(); }
+});
+
+// Image preview
+document.getElementById('image').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  const preview = document.getElementById('imgPreview');
+  if(!f){ preview.style.display='none'; return; }
+  preview.src = URL.createObjectURL(f); preview.style.display='block';
+});
+
+// Toolbar commands
+document.querySelectorAll('.toolbar button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const cmd = btn.dataset.cmd;
+    if(cmd==='h2') document.execCommand('formatBlock', false, 'h2');
+    else if(cmd==='link'){ const url=prompt('URL'); if(url) document.execCommand('createLink', false, url); }
+    else if(cmd==='ul') document.execCommand('insertUnorderedList');
+    else if(cmd==='ol') document.execCommand('insertOrderedList');
+    else document.execCommand(cmd);
+  });
+});
+
+// Insert image in editor
+document.getElementById('insertImage').addEventListener('click', async ()=>{
+  const f = await new Promise(r=>{
+    const ip = document.createElement('input'); ip.type='file'; ip.accept='image/*';
+    ip.onchange = ()=>r(ip.files[0]); ip.click();
+  });
+  if(!f) return;
+  document.execCommand('insertImage', false, URL.createObjectURL(f));
+});
+
+// Escape text
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Convert data to HTML
+function generateHTML(){
+  const data = {
+    title: document.getElementById('title').value.trim(),
+    category: document.getElementById('category').value.trim(),
+    tags: tags,
+    image: document.getElementById('imgPreview').src && document.getElementById('imgPreview').style.display!=='none' ? document.getElementById('imgPreview').src : '',
+    excerpt: document.getElementById('excerpt').value.trim(),
+    content: document.getElementById('editor').innerHTML
+  };
+
+  let html = '';
+  if(data.image) html+=`<img src="${escapeHtml(data.image)}" style="max-width:100%;border-radius:8px;margin-bottom:12px">\n`;
+  html+=`<h2>${escapeHtml(data.title)}</h2>\n`;
+  if(data.category || data.tags.length) html+=`<div style="color:#6b7280;margin-bottom:6px">${escapeHtml(data.category)}${data.tags.length?' • '+data.tags.map(escapeHtml).join(', '):''}</div>\n`;
+  if(data.excerpt) html+=`<p style="color:#333">${escapeHtml(data.excerpt)}</p>\n`;
+  html+=`<div>${data.content}</div>\n`;
+
+  document.getElementById('output').value = html;
+  document.getElementById('livePreview').innerHTML = html;
+}
+
+document.getElementById('generate').addEventListener('click', generateHTML);
+</script>
+
+</body>
+</html>
